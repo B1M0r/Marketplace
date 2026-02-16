@@ -1,0 +1,35 @@
+databaseChangeLog:
+  - changeSet:
+      id: 2-create-refresh-tokens-table
+      author: oldvabik
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: refresh_tokens
+      changes:
+        - createTable:
+            tableName: refresh_tokens
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: token
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: email
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+        - createIndex:
+            indexName: idx_refresh_token_email
+            tableName: refresh_tokens
+            columns:
+              - column:
+                  name: email

@@ -55,7 +55,7 @@
 ### 6. Структурная схема приложения
 Ниже представлена диаграмма компонентов, отражающая архитектуру маркетплейса.
 
-<img width="974" height="408" alt="image" src="https://github.com/user-attachments/assets/c8a98dd0-7bd4-4a66-a93f-68ead5c334cf" />
+<img width="1739" height="718" alt="image" src="https://github.com/user-attachments/assets/870dbd8c-2ad1-4894-975d-0ef742b57d28" />
 
 *Рисунок 1.1 – Диаграмма To Be*
 

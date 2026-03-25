@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { usersAPI, ordersAPI, itemsAPI } from '../api'
 
-function AdminPanel() {
+function AdminPanel({ user }) {
   const [activeTab, setActiveTab] = useState('users')
   const [users, setUsers] = useState([])
   const [orders, setOrders] = useState([])
@@ -50,6 +50,11 @@ function AdminPanel() {
   }, [activeTab])
 
   const handleDeleteUser = async (id) => {
+    if (user.id === id) {
+      setError('Нельзя удалить свой аккаунт')
+      setTimeout(() => setError(''), 3000)
+      return
+    }
     if (!confirm('Удалить пользователя?')) return
     try {
       await usersAPI.deleteUser(id)
@@ -170,27 +175,36 @@ function AdminPanel() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((user) => (
-                  <tr key={user.id}>
-                    <td style={{ fontWeight: 600, color: '#6366f1' }}>#{user.id}</td>
-                    <td style={{ fontWeight: 500 }}>{user.name} {user.surname}</td>
-                    <td style={{ color: '#64748b' }}>{user.email}</td>
+                {users.map((u) => {
+                  const isCurrentUser = user.id === u.id
+                  return (
+                  <tr key={u.id}>
+                    <td style={{ fontWeight: 600, color: '#6366f1' }}>#{u.id}</td>
+                    <td style={{ fontWeight: 500 }}>{u.name} {u.surname}</td>
+                    <td style={{ color: '#64748b' }}>{u.email}</td>
                     <td>
-                      <span className={`badge ${user.role === 'ADMIN' ? 'badge-admin' : 'badge-user'}`}>
-                        {user.role === 'ADMIN' ? 'Админ' : 'Пользователь'}
+                      <span className={`badge ${u.role === 'ADMIN' ? 'badge-admin' : 'badge-user'}`}>
+                        {u.role === 'ADMIN' ? 'Админ' : 'Пользователь'}
                       </span>
                     </td>
                     <td>
                       <button
                         className="btn btn-danger"
-                        onClick={() => handleDeleteUser(user.id)}
-                        style={{ padding: '8px 16px', fontSize: '13px' }}
+                        onClick={() => handleDeleteUser(u.id)}
+                        disabled={isCurrentUser}
+                        style={{ 
+                          padding: '8px 16px', 
+                          fontSize: '13px',
+                          opacity: isCurrentUser ? 0.5 : 1,
+                          cursor: isCurrentUser ? 'not-allowed' : 'pointer'
+                        }}
+                        title={isCurrentUser ? 'Нельзя удалить свой аккаунт' : 'Удалить пользователя'}
                       >
                         Удалить
                       </button>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>

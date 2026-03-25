@@ -4,14 +4,17 @@ import { itemsAPI } from '../api'
 function Items({ user }) {
   const [items, setItems] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
-  const [newItem, setNewItem] = useState({ name: '', price: '', image: null, imagePreview: null })
+  const [newItem, setNewItem] = useState({ name: '', price: '', description: '', images: [], imagePreviews: [] })
   const [showAddForm, setShowAddForm] = useState(false)
   const [cart, setCart] = useState({})
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [editingItem, setEditingItem] = useState(null)
-  const [editData, setEditData] = useState({ name: '', price: '', image: null, imagePreview: null })
+  const [editData, setEditData] = useState({ name: '', price: '', description: '', images: [], imagePreviews: [] })
   const [showEditModal, setShowEditModal] = useState(false)
+  const [selectedItem, setSelectedItem] = useState(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
   const fetchItems = async () => {
     try {
@@ -47,20 +50,19 @@ function Items({ user }) {
       const itemData = {
         name: newItem.name,
         price: parseFloat(newItem.price),
+        description: newItem.description || null,
       }
-      
+
       const response = await itemsAPI.createItem(itemData)
-      
-      if (newItem.image) {
-        await itemsAPI.uploadImage(response.data.id, newItem.image)
+
+      if (newItem.images && newItem.images.length > 0) {
+        await itemsAPI.uploadImages(response.data.id, newItem.images)
       }
-      
+
       // Очищаем URL превью
-      if (newItem.imagePreview) {
-        URL.revokeObjectURL(newItem.imagePreview)
-      }
-      
-      setNewItem({ name: '', price: '', image: null, imagePreview: null })
+      newItem.imagePreviews.forEach(url => URL.revokeObjectURL(url))
+
+      setNewItem({ name: '', price: '', description: '', images: [], imagePreviews: [] })
       setShowAddForm(false)
       fetchItems()
       setSuccess('Товар добавлен!')
@@ -77,20 +79,19 @@ function Items({ user }) {
       const updateData = {}
       if (editData.name !== editingItem.name) updateData.name = editData.name
       if (editData.price !== editingItem.price) updateData.price = parseFloat(editData.price)
-      
+      if (editData.description !== editingItem.description) updateData.description = editData.description
+
       await itemsAPI.updateItem(editingItem.id, updateData)
-      
-      if (editData.image) {
-        await itemsAPI.uploadImage(editingItem.id, editData.image)
+
+      if (editData.images && editData.images.length > 0) {
+        await itemsAPI.uploadImages(editingItem.id, editData.images)
       }
-      
+
       // Очищаем URL превью
-      if (editData.imagePreview) {
-        URL.revokeObjectURL(editData.imagePreview)
-      }
-      
+      editData.imagePreviews.forEach(url => URL.revokeObjectURL(url))
+
       setEditingItem(null)
-      setEditData({ name: '', price: '', image: null, imagePreview: null })
+      setEditData({ name: '', price: '', description: '', images: [], imagePreviews: [] })
       setShowEditModal(false)
       fetchItems()
       setSuccess('Товар обновлён!')
@@ -131,10 +132,22 @@ function Items({ user }) {
     setEditData({
       name: item.name,
       price: item.price,
-      image: null,
-      imagePreview: null
+      description: item.description || '',
+      images: [],
+      imagePreviews: []
     })
     setShowEditModal(true)
+  }
+
+  const openDetailModal = (item) => {
+    setSelectedItem(item)
+    setCurrentImageIndex(0)
+    setShowDetailModal(true)
+  }
+
+  const closeDetailModal = () => {
+    setSelectedItem(null)
+    setShowDetailModal(false)
   }
 
   const totalItems = Object.values(cart).reduce((a, b) => a + b, 0)
@@ -206,31 +219,98 @@ function Items({ user }) {
             />
             <div>
               <label style={{ display: 'block', marginBottom: '8px', color: '#059669', fontWeight: 500 }}>
-                Изображение товара
+                Описание товара
+              </label>
+              <textarea
+                placeholder="Введите описание товара..."
+                value={newItem.description}
+                onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                rows={4}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '2px solid #e2e8f0',
+                  fontFamily: 'inherit',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', color: '#059669', fontWeight: 500 }}>
+                Изображения товара (можно выбрать несколько)
               </label>
               <input
                 type="file"
                 accept="image/*"
+                multiple
                 onChange={(e) => {
-                  const file = e.target.files[0]
-                  if (file) {
+                  const files = Array.from(e.target.files)
+                  const newImages = []
+                  const newPreviews = []
+                  
+                  files.forEach(file => {
                     const previewUrl = URL.createObjectURL(file)
-                    setNewItem({ ...newItem, image: file, imagePreview: previewUrl })
-                  }
+                    newImages.push(file)
+                    newPreviews.push(previewUrl)
+                  })
+                  
+                  setNewItem({ 
+                    ...newItem, 
+                    images: [...newItem.images, ...newImages],
+                    imagePreviews: [...newItem.imagePreviews, ...newPreviews]
+                  })
                 }}
                 style={{ marginBottom: '10px' }}
               />
-              {newItem.imagePreview && (
-                <div style={{ marginTop: '10px' }}>
-                  <img
-                    src={newItem.imagePreview}
-                    alt="Preview"
-                    style={{ maxWidth: '200px', maxHeight: '200px', borderRadius: '8px', objectFit: 'cover' }}
-                    onError={(e) => {
-                      console.error('Ошибка загрузки превью')
-                      e.target.style.display = 'none'
-                    }}
-                  />
+              {newItem.imagePreviews && newItem.imagePreviews.length > 0 && (
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', 
+                  gap: '10px',
+                  marginTop: '10px' 
+                }}>
+                  {newItem.imagePreviews.map((preview, index) => (
+                    <div key={index} style={{ position: 'relative' }}>
+                      <img
+                        src={preview}
+                        alt={`Preview ${index + 1}`}
+                        style={{
+                          width: '100%',
+                          height: '100px',
+                          objectFit: 'cover',
+                          borderRadius: '8px'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          URL.revokeObjectURL(preview)
+                          const newImages = newItem.images.filter((_, i) => i !== index)
+                          const newPreviews = newItem.imagePreviews.filter((_, i) => i !== index)
+                          setNewItem({ ...newItem, images: newImages, imagePreviews: newPreviews })
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '-8px',
+                          right: '-8px',
+                          background: '#ef4444',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '50%',
+                          width: '24px',
+                          height: '24px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '16px'
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -283,47 +363,154 @@ function Items({ user }) {
                   min="0"
                 />
               </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label>Описание</label>
+                <textarea
+                  value={editData.description || ''}
+                  onChange={(e) => setEditData({ ...editData, description: e.target.value })}
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '2px solid #e2e8f0',
+                    fontFamily: 'inherit',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', color: '#059669', fontWeight: 500 }}>
-                  Изображение товара
+                  Изображения товара (можно выбрать несколько)
                 </label>
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={(e) => {
-                    const file = e.target.files[0]
-                    if (file) {
+                    const files = Array.from(e.target.files)
+                    const newImages = []
+                    const newPreviews = []
+                    
+                    files.forEach(file => {
                       const previewUrl = URL.createObjectURL(file)
-                      setEditData({ ...editData, image: file, imagePreview: previewUrl })
-                    }
+                      newImages.push(file)
+                      newPreviews.push(previewUrl)
+                    })
+                    
+                    setEditData({ 
+                      ...editData, 
+                      images: [...editData.images, ...newImages],
+                      imagePreviews: [...editData.imagePreviews, ...newPreviews]
+                    })
                   }}
                   style={{ marginBottom: '10px' }}
                 />
-                {editData.imagePreview ? (
-                  <div style={{ marginTop: '10px' }}>
-                    <img
-                      src={editData.imagePreview}
-                      alt="Preview"
-                      style={{ maxWidth: '200px', maxHeight: '200px', borderRadius: '8px', objectFit: 'cover' }}
-                    />
+                
+                {/* Существующие изображения товара */}
+                {editingItem.images && editingItem.images.length > 0 && (
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', 
+                    gap: '10px',
+                    marginTop: '10px' 
+                  }}>
+                    {editingItem.images.map((img, index) => (
+                      <div key={img.id || index} style={{ position: 'relative' }}>
+                        <img
+                          src={img.image_url}
+                          alt={`Image ${index + 1}`}
+                          style={{
+                            width: '100%',
+                            height: '100px',
+                            objectFit: 'cover',
+                            borderRadius: '8px'
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await itemsAPI.deleteImageById(editingItem.id, img.id)
+                            // Обновляем товар после удаления
+                            const updatedItem = await itemsAPI.getItem(editingItem.id)
+                            setEditingItem(updatedItem.data)
+                            fetchItems()
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '-8px',
+                            right: '-8px',
+                            background: '#ef4444',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '16px'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ) : editingItem.image_url ? (
-                  <div style={{ marginTop: '10px' }}>
-                    <img
-                      src={editingItem.image_url}
-                      alt={editingItem.name}
-                      style={{ maxWidth: '200px', maxHeight: '200px', borderRadius: '8px', objectFit: 'cover' }}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-danger"
-                      onClick={() => handleDeleteImage(editingItem.id)}
-                      style={{ marginTop: '10px', padding: '6px 12px', fontSize: '12px' }}
-                    >
-                      Удалить изображение
-                    </button>
+                )}
+                
+                {/* Новые загруженные изображения (превью) */}
+                {editData.imagePreviews && editData.imagePreviews.length > 0 && (
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', 
+                    gap: '10px',
+                    marginTop: '10px' 
+                  }}>
+                    {editData.imagePreviews.map((preview, index) => (
+                      <div key={index} style={{ position: 'relative' }}>
+                        <img
+                          src={preview}
+                          alt={`Preview ${index + 1}`}
+                          style={{
+                            width: '100%',
+                            height: '100px',
+                            objectFit: 'cover',
+                            borderRadius: '8px'
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            URL.revokeObjectURL(preview)
+                            const newImages = editData.images.filter((_, i) => i !== index)
+                            const newPreviews = editData.imagePreviews.filter((_, i) => i !== index)
+                            setEditData({ ...editData, images: newImages, imagePreviews: newPreviews })
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '-8px',
+                            right: '-8px',
+                            background: '#ef4444',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '16px'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ) : null}
+                )}
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
                 <button type="submit" className="btn btn-success">
@@ -338,6 +525,328 @@ function Items({ user }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showDetailModal && selectedItem && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(4px)'
+        }} onClick={closeDetailModal}>
+          <div className="card" style={{
+            maxWidth: '700px',
+            width: '90%',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            background: 'white',
+            position: 'relative'
+          }} onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={closeDetailModal}
+              style={{
+                position: 'absolute',
+                top: '15px',
+                right: '15px',
+                background: 'rgba(0, 0, 0, 0.1)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '36px',
+                height: '36px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '20px',
+                color: '#64748b',
+                transition: 'all 0.2s',
+                zIndex: 10
+              }}
+            >
+              ×
+            </button>
+
+            {/* Галерея изображений */}
+            {(() => {
+              // Собираем все изображения: из gallery + основное image_url
+              const allImages = []
+              if (selectedItem.images && selectedItem.images.length > 0) {
+                allImages.push(...selectedItem.images.map(img => img.image_url))
+              } else if (selectedItem.image_url) {
+                allImages.push(selectedItem.image_url)
+              }
+
+              if (allImages.length > 0) {
+                const currentImage = allImages[currentImageIndex] || allImages[0]
+
+                return (
+                  <>
+                    <div style={{
+                      width: '100%',
+                      height: '350px',
+                      overflow: 'hidden',
+                      background: '#f1f5f9',
+                      borderRadius: '12px',
+                      marginBottom: '15px',
+                      position: 'relative'
+                    }}>
+                      <img
+                        src={currentImage}
+                        alt={selectedItem.name}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover'
+                        }}
+                      />
+                      
+                      {/* Кнопки навигации по галерее */}
+                      {allImages.length > 1 && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setCurrentImageIndex(prev => prev === 0 ? allImages.length - 1 : prev - 1)
+                            }}
+                            style={{
+                              position: 'absolute',
+                              left: '10px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              background: 'rgba(0, 0, 0, 0.5)',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '40px',
+                              height: '40px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '20px',
+                              transition: 'background 0.2s'
+                            }}
+                          >
+                            ‹
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setCurrentImageIndex(prev => prev === allImages.length - 1 ? 0 : prev + 1)
+                            }}
+                            style={{
+                              position: 'absolute',
+                              right: '10px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              background: 'rgba(0, 0, 0, 0.5)',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '40px',
+                              height: '40px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '20px',
+                              transition: 'background 0.2s'
+                            }}
+                          >
+                            ›
+                          </button>
+                          
+                          {/* Индикаторы изображений */}
+                          <div style={{
+                            position: 'absolute',
+                            bottom: '10px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            display: 'flex',
+                            gap: '8px'
+                          }}>
+                            {allImages.map((_, index) => (
+                              <button
+                                key={index}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setCurrentImageIndex(index)
+                                }}
+                                style={{
+                                  width: '8px',
+                                  height: '8px',
+                                  borderRadius: '50%',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  background: index === currentImageIndex ? 'white' : 'rgba(255, 255, 255, 0.5)',
+                                  transition: 'background 0.2s'
+                                }}
+                              />
+                            ))}
+                          </div>
+                          
+                          {/* Счётчик изображений */}
+                          <div style={{
+                            position: 'absolute',
+                            top: '10px',
+                            right: '10px',
+                            background: 'rgba(0, 0, 0, 0.6)',
+                            color: 'white',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: 600
+                          }}>
+                            {currentImageIndex + 1} / {allImages.length}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    
+                    {/* Миниатюры */}
+                    {allImages.length > 1 && (
+                      <div style={{
+                        display: 'flex',
+                        gap: '10px',
+                        marginBottom: '20px',
+                        overflowX: 'auto',
+                        paddingBottom: '5px'
+                      }}>
+                        {allImages.map((img, index) => (
+                          <button
+                            key={index}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setCurrentImageIndex(index)
+                            }}
+                            style={{
+                              flex: '0 0 auto',
+                              width: '60px',
+                              height: '60px',
+                              border: `2px solid ${index === currentImageIndex ? '#10b981' : 'transparent'}`,
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              cursor: 'pointer',
+                              padding: 0,
+                              background: 'transparent'
+                            }}
+                          >
+                            <img
+                              src={img}
+                              alt={`Thumbnail ${index + 1}`}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover'
+                              }}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )
+              }
+
+              return (
+                <div style={{
+                  width: '100%',
+                  height: '350px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
+                  color: '#94a3b8',
+                  borderRadius: '12px',
+                  marginBottom: '20px'
+                }}>
+                  <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                  </svg>
+                </div>
+              )
+            })()}
+
+            <h2 style={{
+              color: '#1e293b',
+              fontSize: '28px',
+              fontWeight: 700,
+              marginBottom: '15px'
+            }}>
+              {selectedItem.name}
+            </h2>
+
+            <p style={{
+              fontSize: '32px',
+              fontWeight: 'bold',
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              margin: '20px 0'
+            }}>
+              ${selectedItem.price.toFixed(2)}
+            </p>
+
+            {selectedItem.description && (
+              <div style={{
+                marginTop: '25px',
+                padding: '20px',
+                background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                borderRadius: '12px',
+                border: '1px solid #e2e8f0'
+              }}>
+                <h3 style={{
+                  color: '#64748b',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  marginBottom: '12px',
+                  letterSpacing: '0.5px'
+                }}>
+                  Описание
+                </h3>
+                <p style={{
+                  color: '#334155',
+                  lineHeight: 1.7,
+                  fontSize: '16px',
+                  margin: 0,
+                  whiteSpace: 'pre-wrap'
+                }}>
+                  {selectedItem.description}
+                </p>
+              </div>
+            )}
+
+            {user.role !== 'ADMIN' && (
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  handleAddToCart(selectedItem)
+                  closeDetailModal()
+                }}
+                style={{
+                  width: '100%',
+                  marginTop: '25px',
+                  padding: '16px',
+                  fontSize: '16px',
+                  fontWeight: 600
+                }}
+              >
+                Добавить в корзину
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -405,13 +914,21 @@ function Items({ user }) {
         </div>
       ) : (
         <div className="grid">
-          {items.map((item) => (
+          {items.map((item) => {
+            // Определяем главное изображение и количество фото
+            const mainImage = item.images && item.images.length > 0 
+              ? item.images[0].image_url 
+              : item.image_url
+            const imagesCount = (item.images ? item.images.length : 0) + (item.image_url && (!item.images || item.images.length === 0) ? 1 : 0)
+
+            return (
             <div key={item.id} className="card" style={{
               position: 'relative',
               overflow: 'hidden',
               transition: 'all 0.3s ease',
-              padding: 0
-            }}>
+              padding: 0,
+              cursor: 'pointer'
+            }} onClick={() => openDetailModal(item)}>
               <div style={{
                 position: 'absolute',
                 top: 0,
@@ -421,15 +938,16 @@ function Items({ user }) {
                 background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)'
               }}></div>
 
-              {item.image_url ? (
+              {mainImage ? (
                 <div style={{
                   width: '100%',
                   height: '200px',
                   overflow: 'hidden',
-                  background: '#f1f5f9'
+                  background: '#f1f5f9',
+                  position: 'relative'
                 }}>
                   <img
-                    src={item.image_url}
+                    src={mainImage}
                     alt={item.name}
                     style={{
                       width: '100%',
@@ -437,6 +955,29 @@ function Items({ user }) {
                       objectFit: 'cover'
                     }}
                   />
+                  {imagesCount > 1 && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '10px',
+                      right: '10px',
+                      background: 'rgba(0, 0, 0, 0.7)',
+                      color: 'white',
+                      padding: '4px 10px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                      </svg>
+                      {imagesCount}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={{
@@ -481,7 +1022,10 @@ function Items({ user }) {
                 {user.role !== 'ADMIN' ? (
                   <button
                     className="btn btn-primary"
-                    onClick={() => handleAddToCart(item)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleAddToCart(item)
+                    }}
                     style={{
                       width: '100%',
                       background: cart[item.id]
@@ -495,14 +1039,20 @@ function Items({ user }) {
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button
                       className="btn btn-primary"
-                      onClick={() => openEditModal(item)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openEditModal(item)
+                      }}
                       style={{ flex: 1 }}
                     >
                       Редактировать
                     </button>
                     <button
                       className="btn btn-danger"
-                      onClick={() => handleDeleteItem(item.id)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteItem(item.id)
+                      }}
                       style={{ flex: 1 }}
                     >
                       Удалить
@@ -511,7 +1061,7 @@ function Items({ user }) {
                 )}
               </div>
             </div>
-          ))}
+          )})}
         </div>
       )}
     </div>

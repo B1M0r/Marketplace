@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, Date, ForeignKey, Enum, Float, DateTime
+from sqlalchemy import Column, Integer, String, Date, ForeignKey, Enum, Float, DateTime, Text
 from sqlalchemy.orm import relationship
 import enum
 from datetime import datetime
+from typing import Optional
 from app.db.database import Base
 
 
@@ -63,9 +64,22 @@ class Item(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
     price = Column(Float, nullable=False)
-    image_url = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    image_url = Column(String, nullable=True)  # Основное изображение (для совместимости)
 
     order_items = relationship("OrderItem", back_populates="item")
+    images = relationship("ItemImage", back_populates="item", cascade="all, delete-orphan", order_by="ItemImage.order")
+
+
+class ItemImage(Base):
+    __tablename__ = "item_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    image_url = Column(String, nullable=False)
+    order = Column(Integer, default=0)  # Порядок отображения
+
+    item = relationship("Item", back_populates="images")
 
 
 class OrderItem(Base):

@@ -55,7 +55,17 @@ export const itemsAPI = {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
+  uploadImages: (id, files) => {
+    const formData = new FormData()
+    files.forEach(file => formData.append('files', file))
+    return api.post(`/items/${id}/upload-images`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  getImages: (id) => api.get(`/items/${id}/images`),
   deleteImage: (id) => api.delete(`/items/${id}/upload-image`),
+  deleteImageById: (itemId, imageId) => api.delete(`/items/${itemId}/images/${imageId}`),
+  reorderImages: (id, imageIds) => api.put(`/items/${id}/images/reorder`, imageIds),
 }
 
 export const ordersAPI = {

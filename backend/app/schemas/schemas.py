@@ -129,15 +129,32 @@ class UserListResponse(BaseModel):
 
 
 # Item schemas
+class ItemImageCreate(BaseModel):
+    image_url: str
+    order: int = 0
+
+
+class ItemImageResponse(BaseModel):
+    id: int
+    item_id: int
+    image_url: str
+    order: int
+
+    class Config:
+        from_attributes = True
+
+
 class ItemCreate(BaseModel):
     name: str
     price: float = Field(..., gt=0)
+    description: Optional[str] = None
     image_url: Optional[str] = None
 
 
 class ItemUpdate(BaseModel):
     name: Optional[str] = None
     price: Optional[float] = Field(None, gt=0)
+    description: Optional[str] = None
     image_url: Optional[str] = None
 
 
@@ -145,7 +162,9 @@ class ItemResponse(BaseModel):
     id: int
     name: str
     price: float
+    description: Optional[str] = None
     image_url: Optional[str] = None
+    images: List[ItemImageResponse] = []
 
     class Config:
         from_attributes = True

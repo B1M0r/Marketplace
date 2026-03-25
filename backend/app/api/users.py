@@ -168,10 +168,21 @@ def create_card(
 
 
 @router.get("/cards", response_model=list[CardResponse])
+def get_my_cards(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Получить все карты текущего пользователя"""
+    cards = db.query(Card).filter(Card.user_id == current_user.id).all()
+    return cards
+
+
+@router.get("/cards/all", response_model=list[CardResponse])
 def get_all_cards(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
+    """Получить все карты всех пользователей (только для админа)"""
     cards = db.query(Card).all()
     return cards
 

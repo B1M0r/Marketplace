@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { itemsAPI, ordersAPI } from '../api'
+import { itemsAPI, ordersAPI, usersAPI } from '../api'
 import { useNavigate } from 'react-router-dom'
 
 function Cart({ user }) {
@@ -7,6 +7,10 @@ function Cart({ user }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [selectedCardId, setSelectedCardId] = useState('')
+  const [processingPayment, setProcessingPayment] = useState(false)
+  const [userCards, setUserCards] = useState([])
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -17,7 +21,20 @@ function Cart({ user }) {
     } else {
       setLoading(false)
     }
+    loadUserCards()
   }, [])
+
+  const loadUserCards = async () => {
+    try {
+      const response = await usersAPI.getCards()
+      setUserCards(response.data)
+      if (response.data.length > 0) {
+        setSelectedCardId(response.data[0].id.toString())
+      }
+    } catch (err) {
+      console.error('Ошибка загрузки карт:', err)
+    }
+  }
 
   const loadCartItems = async (cartData) => {
     try {
@@ -67,25 +84,50 @@ function Cart({ user }) {
   }
 
   const handleCreateOrder = async () => {
+    if (userCards.length === 0) {
+      setError('У вас нет сохранённых карт. Добавьте карту в профиле.')
+      setTimeout(() => setError(''), 3000)
+      return
+    }
+    setShowPaymentModal(true)
+  }
+
+  const handlePayment = async () => {
+    if (!selectedCardId) {
+      setError('Выберите карту для оплаты')
+      return
+    }
+
+    setProcessingPayment(true)
+    
     const orderItems = cartItems.map(item => ({
       name: item.name,
       quantity: item.quantity,
       price: item.price
     }))
 
+    const selectedCard = userCards.find(c => c.id === parseInt(selectedCardId))
+
     try {
+      // Имитация обработки платежа
+      await new Promise(resolve => setTimeout(resolve, 2000))
+
       await ordersAPI.createOrder({
         email: user.email,
         items: orderItems,
       })
+      
       localStorage.removeItem('cart')
-      setSuccess('Заказ успешно создан!')
+      setProcessingPayment(false)
+      setShowPaymentModal(false)
+      setSuccess('Оплата прошла успешно! Заказ создан.')
       setCartItems([])
       setTimeout(() => {
         setSuccess('')
         navigate('/orders')
       }, 2000)
     } catch (err) {
+      setProcessingPayment(false)
       setError(err.response?.data?.detail || 'Ошибка создания заказа')
       setTimeout(() => setError(''), 3000)
     }
@@ -260,6 +302,185 @@ function Cart({ user }) {
             </table>
           </div>
         </>
+      )}
+
+      {showPaymentModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(4px)'
+        }} onClick={() => !processingPayment && setShowPaymentModal(false)}>
+          <div className="card" style={{
+            maxWidth: '450px',
+            width: '90%',
+            background: 'white',
+            position: 'relative'
+          }} onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => !processingPayment && setShowPaymentModal(false)}
+              disabled={processingPayment}
+              style={{
+                position: 'absolute',
+                top: '15px',
+                right: '15px',
+                background: 'rgba(0, 0, 0, 0.1)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '36px',
+                height: '36px',
+                cursor: processingPayment ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '20px',
+                color: '#64748b',
+                transition: 'all 0.2s'
+              }}
+            >
+              ×
+            </button>
+
+            <h2 style={{
+              color: '#1e293b',
+              fontSize: '24px',
+              fontWeight: 700,
+              marginBottom: '10px',
+              paddingRight: '30px'
+            }}>
+              Оплата заказа
+            </h2>
+
+            <p style={{
+              color: '#64748b',
+              fontSize: '14px',
+              marginBottom: '25px'
+            }}>
+              Выберите карту для оплаты
+            </p>
+
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              marginBottom: '25px'
+            }}>
+              {userCards.map((card) => (
+                <label
+                  key={card.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '16px',
+                    border: `2px solid ${selectedCardId === card.id.toString() ? '#10b981' : '#e2e8f0'}`,
+                    borderRadius: '12px',
+                    cursor: processingPayment ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s',
+                    background: selectedCardId === card.id.toString() ? '#f0fdf4' : 'white'
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="card"
+                    value={card.id}
+                    checked={selectedCardId === card.id.toString()}
+                    onChange={(e) => setSelectedCardId(e.target.value)}
+                    disabled={processingPayment}
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      marginRight: '12px',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <p style={{
+                      margin: 0,
+                      fontWeight: 600,
+                      color: '#1e293b',
+                      fontFamily: 'monospace',
+                      fontSize: '16px'
+                    }}>
+                      •••• {card.number.slice(-4)}
+                    </p>
+                    <p style={{
+                      margin: '4px 0 0 0',
+                      fontSize: '13px',
+                      color: '#94a3b8'
+                    }}>
+                      Действует до: {new Date(card.expiration_date).toLocaleDateString('ru-RU')}
+                    </p>
+                  </div>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={selectedCardId === card.id.toString() ? '#10b981' : '#cbd5e1'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                    <line x1="1" y1="10" x2="23" y2="10"></line>
+                  </svg>
+                </label>
+              ))}
+            </div>
+
+            <div style={{
+              padding: '16px',
+              background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+              borderRadius: '12px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ color: '#64748b', fontSize: '14px' }}>Товары ({totalItems} шт.)</span>
+                <span style={{ fontWeight: 600, color: '#1e293b' }}>${totalPrice.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', borderTop: '2px dashed #e2e8f0' }}>
+                <span style={{ fontWeight: 700, color: '#1e293b', fontSize: '16px' }}>Итого</span>
+                <span style={{ fontWeight: 700, color: '#10b981', fontSize: '20px' }}>${totalPrice.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <button
+              className="btn btn-success"
+              onClick={handlePayment}
+              disabled={processingPayment}
+              style={{
+                width: '100%',
+                padding: '16px',
+                fontSize: '16px',
+                fontWeight: 600,
+                opacity: processingPayment ? 0.7 : 1,
+                cursor: processingPayment ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px'
+              }}
+            >
+              {processingPayment ? (
+                <>
+                  <div className="loading-spinner" style={{
+                    width: '20px',
+                    height: '20px',
+                    borderColor: 'rgba(255,255,255,0.3)',
+                    borderTopColor: 'white'
+                  }}></div>
+                  Обработка...
+                </>
+              ) : (
+                <>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                    <line x1="1" y1="10" x2="23" y2="10"></line>
+                  </svg>
+                  Оплатить ${totalPrice.toFixed(2)}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
